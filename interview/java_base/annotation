@@ -1,0 +1,16 @@
+*meta-annotation
+元注解是用来定义注解行为的注解
+@Rentention
+用于指定注解的生命周期
+.SOURCE: 只在源码阶段保留,编译后丢弃,如@Override
+.CLASS: 编译时保留到.class文件,运行时丢弃
+.RUNTIME: 运行时保留,JVM可以通过反射读取,是最常见的,框架常依赖
+
+@Target
+.指定注解可以用在什么位置, 例如Type(类/接口),METHOD,FIELD,PARAMETER等
+
+@Documented
+表示注解会出现在JavaDoc里
+
+@Inherited
+表示子类会继承父类的注解

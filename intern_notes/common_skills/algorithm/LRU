@@ -1,0 +1,32 @@
+除了能手撕, 我还可以使用Java自带的数据结构,并且解释底层原理.
+另外,还能够实现并发安全
+
+LinkedHashMap<K,V> extends HashMap<K,V> // 继承了HashMap
+
+.order属性
+boolean accessOrder true -> 按照访问顺序(LRU)
+false -> 插入顺序(FIFO)
+
+.双向链表
+Entry<K,V> HashMap.Node<K,V> {
+    // 双向链表的指针
+    Entry<K,V> before,after; 
+    
+}
+
+.核心方法
+linkNodeLast -> 插入新节点, 插入的时候把节点加到链表尾部
+
+afterNodeAccess -> 访问节点,
+if accessOrder == true -> 把节点从链表中摘除,再移动到尾部
+
+删除最旧节点,
+protected boolean removeEldestEntry(Map.Entry<K,V> eldest){
+    return false;
+}
+重写方法, eldest是头结点 , return size > capacity; 自动删除最旧的
+
+而线程不安全, 可以在get,put方法加锁
+private final ReentrantLock lock = new ReentrantLock();
+lock.lock();
+try {} finally{lock.unlock();};

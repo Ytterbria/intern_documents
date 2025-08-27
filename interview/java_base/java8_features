@@ -1,0 +1,78 @@
+*Lambda 
+lambda 本质上是一种匿名函数
+
+(parameters) -> expression
+(parameters) -> {statements;}
+
+参数列表的语法:
+一个参数,并且不写类型时可以省略参数的括号() ,
+ 但是如果要两个以上参数,或者有注解就需要(), 
+函数体语法: 
+而对于函数体,如果单表达式,且无return,可以省略{},
+
+*Option 
+一个容器类,存储T的值或者表示不存在(null)
+避免NPE空指针异常
+
+创建Option的方式: 
+Option <string> opt = Option.of("nonull"); 不允许为null, .of(null)会直接爆异常
+Option <string> opt2 = Option.ofNullable(null);允许为null,相当于.empty();
+Option <String> opt3 = Option.empty(); 创建一个空的option
+
+常用方法: 
+.isPresent: 是否存在
+.isEmpty: 是否为空
+.get: 如果为空会抛异常
+.orElse("default"): 如果为空,会返回接收的默认值
+.orElseGet(() -> opt.setValue("not null"));传一个supplier,如果为空才调用
+.orElseThrow(() -> new BusinessException()); 如果为空,抛出异常
+
+*CompletableFuture
+java5中有Future的概念, 但是却由于以下缺点:
+1.future.get()是阻塞的,无法优雅地进行回调
+2.不能方便地组合多个异步任务.
+3.对于异常处理很麻烦.
+
+执行: 
+.supplyAsync: 有返回值的异步执行
+.runAsync: 无返回值的异步执行
+
+结果处理:
+.thenApply: 处理结果并返回新值
+CompletableFuture<Integer> future = CompletableFuture.supplyAsync(() -> 10)
+    .thenApply(x -> x * 2);  接收上一步结果
+
+.thenAccept: 消费结果(没有返回值)
+CompletableFuture.supplyAsync(() -> "apple")
+    .thenAccept(v -> System.out.println("结果是: " + v));
+
+.thenRun: 不关心结果,只是接着执行额外的任务
+CompletableFuture.supplyAsync(() -> "pear")
+    .thenRun(() -> System.out.println("任务完成了！"));
+
+.thenCompose: 串行连接两个异步任务(依赖关系,上一个的结果,是下一个任务的输入)
+CompletableFuture<Integer> future = CompletableFuture.supplyAsync(() -> 10)
+    .thenCompose(x -> CompletableFuture.supplyAsync(() -> x * 2));
+
+.thenCombine 并行组合两个任务,互不干扰依赖,最后可以把结果合并
+CompletableFuture<Integer> f1 = CompletableFuture.supplyAsync(() -> 10);
+CompletableFuture<Integer> f2 = CompletableFuture.supplyAsync(() -> 20);
+CompletableFuture<Integer> result = f1.thenCombine(f2, Integer::sum);
+
+.allOf/anyOf 批量任务
+等待任何完成/等待其中一个完成
+
+异常处理: 
+.exceptionally(ex -> {
+    sout("error message" + ex.getMessage);
+})
+.handler((result,ex) ->{
+    if (ex != null)  sout(ex);
+    return result;
+})
+
+与线程的关系,理解
+每次supply,或run async时,就会把任务提交到ForkJoinPool.commonPool中执行
+这是JVM启动时自动创建的,单例,全局共用
+
+

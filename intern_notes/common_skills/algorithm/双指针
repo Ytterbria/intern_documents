@@ -1,0 +1,21 @@
+.最多水的容器: 
+ public int maxArea(int[] height) {
+        int left = 0,right = height.length - 1,res = 0;
+        int leftMax = 0,rightMax = 0;
+        while (left < right){
+           res = Math.max(res,(right-left) * Math.min(height[left],height[right]));
+           if (height[left] < height[right]){
+            left ++;
+           }else right --;
+        }
+        return res;
+    }
+维护左边的最高的和右边的最高的
+
+.接雨水: 
+先遍历两次,把leftMax和rightMax数组dp维护好, 然后再遍历数组本身;
+
+.三数之和:  四数之和同理,只是多了个j = i + 1遍历层
+1. if(i > 0 && nums[i] == nums[i-1]) continue去重
+2. while(left < right && nums[left] == nums[left -1]) left ++;
+right同理 也是要去重

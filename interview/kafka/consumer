@@ -1,0 +1,26 @@
+*基本特性
+消费者是从Kafka中pull消息的客户端. 
+是主动拉取消息而不是被动推送. 可以通过offset来指定消费的起始位置
+可以和其他消费者组成Consumer Group,实现负载均衡和容错,协同分配分区.
+
+*消费组(Consumer Group)
+1.不同的消费组是完全独立的‘逻辑消费者’, 每个消费组都有自己的group id,kafka为每个消费组维护一组独立的offsets. 每组消费者都会按照自己的offset读消息,互不影响. 
+
+2.一个消费组内的消费者可以分摊Topic的Partition,每个Partition只能被组内一个消费者消费.
+
+3.一个Topic可以同时被不同消费组中的消费者消费.
+例如一个订单消息,既给BI统计系统消费组,又给计费系统消费组,分别属于不同的消费组. 
+一个组内的消费者功能是一致的,它们是均摊协作关系,而不是业务区分关系,业务区分是消费组层级的事
+
+4.一个消费者组可以对应多个Topic,Kafka会把多个Topic分区列表合并,然后再做分区分配给组内的消费者.   业务场景如下: 
+i. 多个Topic数据逻辑类似的场景
+topic_user_login, topic_user_logout,记录用户登入和登出行为的两个Topic,可以给同一个消费者组订阅.
+ii. 需要统一消费多个数据源(统一上下文)
+topic_order_created, topic_payment_success,记录订单创建和支付成功的两个Topic需要同时监听这两个事件流,进行实时关联判断
+
+
+*分区分配策略(Partition Assignment Strategy)
+1.Range Assignor(default): 按照分区范围分配,按分区编号将连续的分区分配给消费者.
+2.Round Robin Assignor: 轮询分配,将分区平均分配给消费者,适合分区数多于消费者数的场景.更加均匀
+3.Sticky Assignor(Kafka 2.4+): 粘性分配,根据历史分配记录智能选择分区,尽量保持消费者之前饿分配关系,减少数据迁移,提高性能.
+4.Cooperative Sticky Assignor(Kafka 2.8+): 协作粘性分配,在Sticky基础上,允许消费者之间协作调整分配,进一步优化性能和稳定性.

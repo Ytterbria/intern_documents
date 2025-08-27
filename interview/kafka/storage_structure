@@ -1,0 +1,14 @@
+*存储架构和日志管理
+.日志段和存储架构
+Kafka存储基于磁盘顺序写 + Segment段文件管理,每个分区在磁盘上是一个独立的文件夹
+Kafka不会把所有数据放在一个巨大的日志文件里,而是分成多个段文件,每个segment大小(log.segment.bytes)默认是1GB,写满过后会新建一个segment. 每个segment里都有.log文件,.index文件,.timeindex时间索引文件
+
+.索引机制
+1.偏移索引(Offset Index): key: 消息的逻辑offset, value: 消息在日志文件中的物理位置
+2.时间索引: key: 消息写入的时间戳,value: 消息offset. 支持根据时间查找消息
+
+.数据删除策略
+Kafka的删除不针对消费过的消息的删除,而是根据时间和大小来删除旧的segment
+基于时间: log.rentention.hours,保留一定小时的数据,过期删除
+基于大小: log.retention.bytes: 保留一定大小,超过则删除旧数据
+Compact 压缩模式(cleanup.policy=compact): 只保留最新的key对应的消息

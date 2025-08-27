@@ -1,0 +1,30 @@
+*java序列化是什么 ? 
+序列化是把java对象转换为字节序列的过程,方便对象进行持久化存储在网络中传输
+反序列化就是将byte stream还原为java对象的过程
+
+*为什么要用序列化 ?
+1.跨进程/跨网络传输对象,例如RPC调用,Kafka消息传输,Netty网络通信
+2.持久化对象,把对象保存在磁盘,数据库,缓存中
+3.缓存对象,序列化后存储,更节省空间
+
+*如何实现序列化 ?
+1.需要序列化的对象 implements Serializable接口
+2.代码实现
+
+ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream("object.dat")); 创建输出流
+oos.writeObject(object); 将对象写入输出流,进行序列化
+oos.close(); 关闭输出流
+
+ObjectInputStream ois = new ObjectInputStream(new FileInputStream("object.dat"));创建输入流
+Object object = ois.readObject(); 从输入流中读取对象,反序列化
+ois.close(); 关闭输入流
+
+*注意事项
+1.手动定义serialVersionUID,用来唯一标识类的序列化版本.
+@Serial
+private static final long serialVersionUID = 1L; 
+ 如果类修改过(加了字段,改过方法)版本不匹配可能导致序列化失败
+2. transient关键字,标记不需要序列化的字段,例如密码等敏感信息
+3. 序列化的对象必须是可序列化的,如果对象中有不可序列化的字段,需要标记为transient
+4.静态字段不会被序列化,因为它们属于类而不是对象实例
+

@@ -1,0 +1,44 @@
+*Kafka集群由多个Broker组成,每个Broker都是Kafka服务器实例
+   Producer1    Producer2
+       |            |
+       v            v
+   +-------Kafka Cluster-------+
+   |  Broker1  Broker2  Broker3|
+   |   |        |        |     |
+   |  P0(L)    P0(F)    P1(L)  |
+   |  P1(F)    P1(F)    P2(L)  |
+   +---------------------------+
+       ^            ^
+       |            |
+   Consumer1    Consumer2
+
+
+*核心概念解释
+Broker: Kafka集群中的服务器节点,负责存储Partition数据和处理读写请求
+Topic: 消息分类标签(逻辑上的消息管道,可以理解为某一个业务消息集合)
+Partition: Topic的分片,数据分布到不同的Broker,实现了并行的处理,每个Partition内部都是有序的
+Offset: 每个Partition内消息的唯一位置表示,供消费者记录消费进度
+Consumer Group: 消费者分组,Kafka会确保一个Partition同时只被一个组内的消费者消费
+Replica: 分区的副本,分布在不同Broker上,包含1个Leader和若干Follower
+Leader: 每个Partition都会有一个Leader副本,它会负责该分区的所有读写请求,
+客户端只会与Leader交互,不会直接读写Follower
+Follower:是Leader的备份,它们会从Leader异步复制数据(pull模式).Follower不对外提供读写服务,
+它的任务是保证高可用性,例如有Leader挂了,那么就会从Follower中选一个新的Leader.
+ISR(In-Sync Replica): 同步副本集合,包含了Leader + 与Leader同步进度足够接近的Follower,
+只有ISR成员才能被选为新的Leader.
+如果replic.lag.time.max.ms(default 10s) 时间内没有从Leader同步数据,那么该Follower会被移出ISR.¸
+
+
+*数据写入过程(Producer -> Broker)
+1.Producer根据分区策略(随机,轮询,hash)决定写入哪个partition.
+2.Producer发送消息给该Partition的Leader Broker
+3.Leader将消息写入本地日志(顺序写磁盘)
+4.Leader将消息推送给ISR中的Follower
+5.当ISR中的所有Follower确认收到消息(ack==all)后,Leader返回ACK给Producer
+
+*数据读取过程(Broker -> Consumer)
+1.Consumer通过协调器(Group Coordinator) 找到分配给它的Partition Leader.
+2.Consumer向Leader发送Fetch请求,请求特定Partition的消息.
+3.Leader返回消息数据和最新的Offset.
+4.Consumer处理消息,更新自己的Offset.
+

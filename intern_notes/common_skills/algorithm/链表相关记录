@@ -1,0 +1,81 @@
+遍历的时候, 如果curr = dummy, 那么条件判断需要 while (curr.next != null){curr = curr.next;}
+
+如果是正常的给的头节点 直接while(head != null) {head = head.next;}就行了
+返回值也是同理,需要返回dummy.next;
+
+.两两交换: 
+while (curr.next != null && curr.next.next != null)
+ListNode first = curr.next,second = curr.next.next;
+            curr.next = second;
+            first.next = second.next;
+            second.next = first;
+            curr = curr.next.next;
+
+.删第n个节点 : 
+1.全进stack,然后pop() n次, ListNode p = stack.peek()
+p.next = p.next.next;
+2.快慢指针: 先让fast跑n个节点,然后删除slow.next = slow.next.next;
+
+
+.k个升序的合并: 合并 + 分治
+合并链表: 
+private ListNode mergeToLists(ListNode left,ListNode right){
+        ListNode dummy = new ListNode(-1);
+        ListNode curr = dummy;
+        while (left != null && right != null){
+            if (left.val < right.val){
+                curr.next = left;
+                left = left.next;
+            }else {
+                curr.next = right;
+                right = right.next;
+            }
+            curr = curr.next;
+        }
+        if (left != null || right != null){
+            curr.next = (left != null) ? left : right;
+        }
+        return dummy.next;
+    }
+
+ merge(lists, int left,int right) + mergeTwoLists(ListNode l1,ListNode l2), 分治算法,多次递归 + 合并有序链表
+
+LRU LinkedHashMap addtoHead,removeNode,moveToHead,removeTail;
+
+K 个一组翻转 反转 + 链表操作(断开,接上)
+反转链表
+private ListNode reverse(ListNode head){
+        ListNode curr = head,prev = null;
+        while (curr != null){
+            ListNode t = curr.next;
+            curr.next = prev;
+            prev = curr;
+            curr = t;
+        }
+        return prev;
+    }
+
+while (true){
+            for (int i = 0; i< k && end != null; i++){
+                end = end.next;
+            }
+            if (end == null) break;
+            ListNode start = prev.next,tail = end.next;
+            end.next = null;
+            prev.next = reverse(start);
+            start.next = tail;
+            prev = start;
+            end = start;
+        }
+记得end.next = null断开后续的,否则会把后面的全部翻转了. 
+
+环形链表 II 快慢指针判hasCycle + slow重回头节点寻找
+while (fast != null){
+    fast = fast.next.next;
+    slow = slow.next;
+    if (fast == slow) {
+        hasCycle = true;
+        break;
+    }
+}
+最后 return slow

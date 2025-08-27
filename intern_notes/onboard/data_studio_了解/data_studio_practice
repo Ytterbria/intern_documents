@@ -1,0 +1,15 @@
+*大数据开发的流程 
+1.数据采集(Ingestion)
+把业务系统,日志系统,平台产生的数据采集到大数据存储平台(HDFS,S3对象存储等)
+2.数据存储(Storage) 
+用合适的格式把对应的数据存储到对应的位置. 常用HDFS,对象存储,HBase,ClickHouse(列式存储),Elasticsearch
+3.数据处理(Processing) 
+把清洗,转换,聚合数据,形成中间层或者业务指标.批处理用Hive,Spark,Presto,Thrino,
+实时处理用Flink,Spark Streaming,Kafka Streams.非Sql处理用Spark Core(Scala/Python),MapReduce(Java)等
+4.数据建模(Modeling)
+将数据加工成易用的分层结构(ODS -> DWD -> DWS -> ADS)方便下游直接消费.
+5.数据服务(Serving) 
+把加工好的数据提供给下游系统或相关业务使用. 例如提供API接口查询,提供CSV,Excel,报表数据导出,
+提供OLAP查询,提供搜索服务(Elasticsearch)
+
+*data studio

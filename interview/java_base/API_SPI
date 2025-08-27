@@ -1,0 +1,6 @@
+什么是SPI 
+Service Provider Interface. 
+对比API Application Programming Interface,它的本质是服务提供者接口
+SPI是面向框架和扩展的机制,允许应用在不修改源码的情况下介入不同的实现
+
+

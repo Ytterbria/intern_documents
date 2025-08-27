@@ -1,0 +1,15 @@
+*offset是什么
+.offset是在partition级别记录消息位置的表示,对于一个partition,不同的消费组会有各自的offset,同一消费组的不同消费者共享offset,因为partition只分配给组内的一个消费者.
+
+.Kafka把消费组的Offset存在了一个内部的Topic中: __consumer_offsets
+每个记录的key=(group id,topic,partition),value=(offset);
+如果有消费者挂了,那么重启时Kafka会把这个提交的offset作为继续消费的位置.
+
+*offset提交方式
+1.自动提交(enable.auto.commit=true)
+Kafka Consumer会按照auto.commit.interval.ms周期性地自动提交当前已经poll的消息的offset. 这种方式简单,不需要自己维护. 但是不精确,如果消费者在commit之前就挂掉了,就可能导致重复消费.
+2.手动提交 分为同步和异步两种方式
+同步提交: consumer.commitSync() 会阻塞等待Kafka的响应,直到提交成功,可以确保提交的准确性,但会增加延迟.
+异步提交: consumer.commitAsync() 不会阻塞,提交后立即返回,适合高吞吐量场景,但可能会丢失一些提交结果. 可以通过回调函数处理提交结果.
+
+

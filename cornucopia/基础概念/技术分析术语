@@ -1,0 +1,23 @@
+K线图(Candlestick Chart)
+显示开盘价,收盘价,最高价,最低价
+K 线反应市场心理和主力资金动向
+阳线(收盘价 > 开盘价) ? 什么收盘开盘? daily? 
+
+均线(Moving Average,MA)
+n日均线 = 最近n天收盘价平均. 用于判断趋势. 
+均线是市场共识价格的体现. 多空平衡点
+
+MACD(Moving Average Convergence Divergence)
+指数平滑移动平均线差,判断趋势强弱和反转
+量化市场的栋梁和趋势,可以用于结合仓位管理
+
+RSI(Relative Strength Index)
+相对强弱指数, 0~100衡量超买/超卖. 反应市场的短期情绪
+
+布林线(Bollinger Bands)
+上下轨 = 移动平均 + 2σ
+价格突破轨道常常伴随回调或者趋势开始,结合量能更有效
+
+成交量(volume)
+价格变化有成交量配合 -> 趋势更可靠. 能反应市场参与度
+

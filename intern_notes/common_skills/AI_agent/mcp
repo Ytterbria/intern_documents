@@ -1,0 +1,21 @@
+Model Context Protocol
+一种标准化协议,定义了LLM和外部工具/数据/服务交互 的方式
+解决了各个框架工具接口调用不统一的混乱局面,让智能体开发有一个通用协议
+让LLM调用工具,就像浏览器HTTP调用API一样有标准
+*有三类核心能力
+.Tools 
+标准化工具调用接口, 工具用JSON Schema描述输入输出. 
+LLM调用时只需要生成JSON参数,平台负责执行. 
+.Resources
+对于LLM能访问的外部数据源, MCP定义了标准的方式去读取/写入这些资源
+.Prompts
+标准化的提示模板,MCP允许共享/复用prompt,而不是写死在某个框架里
+
+*工作机制
+1.MCP Server: 需要开发者实现的服务,暴露工具/资源/prompt (通过JSON Schema定义)
+2.MCP Client: Agent框架或LLM,通过协议访问server里的服务
+调用流程: 
+LLM决定调用工具 -> 生成JSON参数 -> MCP Client转发到 MCP Server ->
+MCP 执行工具(如查数据库,调API) -> 返回结果给LLM
+
+

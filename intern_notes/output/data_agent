@@ -1,0 +1,60 @@
+Use Case：用户上传文件 → 提问题 → Agent 生成分析计划 → 用户确认并运行 → 自动执行代码 → 修正错误 → 得到结果。
+Main Process：
+用户上传 CSV → 存在 Shared Drive，可以直接拿到 s3 path。
+初始化时，Agent 读取 CSV → 转换成 DataFrame → 缓存在 Redis。
+每次 Notebook cell 执行完后，都会把 DataFrame 信息上报到 Redis。 后续步骤依赖最新的 DataFrame 信息，Agent 根据上下文自动生成新的代码。
+
+Conversation Management（对话管理）
+每个 Notebook kernel 对应一个 conversation。
+用户与 Copilot 的每次交互、点击 accept and run、系统自动执行步骤，统统算作 message。
+所有对话和消息都存数据库（MySQL）：
+conversation_tab：存会话整体信息（kernel_id、project_code、status、用户账号、创建时间…）。
+message_tab：存每条消息（属于哪个 conversation，消息角色：user/system/assistant，内容，是否可见，扩展字段如 s3 key 等）。
+👉 意义：
+这是为了 持久化所有交互过程，既方便回溯，又能用于训练和优化。
+
+conversation表
+CREATE TABLE `conversation_tab` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'primary key',
+  `kernel_id` varchar(128) NOT NULL DEFAULT '' COMMENT 'kernel id',
+  `asset_id` bigint(20) NOT NULL DEFAULT '0' COMMENT 'asset id of notebook', 放到extend_field
+  `project_code` varchar(256) NOT NULL COMMENT 'project code',
+  `conversation_type` varchar(64) NOT NULL DEFAULT '' COMMENT 'scenario type of conversation',
+  `conversation_status` tinyint(4) NOT NULL DEFAULT '1' COMMENT '1-active 0-inactive',
+  `extend_field` text COMMENT 'extend filed, json string',
+  `create_by` varchar(255) NOT NULL DEFAULT '' COMMENT 'user hadoop account',
+  `create_time` bigint(20) NOT NULL DEFAULT '0' COMMENT 'timestamp in millis',
+  `update_time` bigint(20) NOT NULL DEFAULT '0' COMMENT 'timestamp in millis',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+message表
+CREATE TABLE `message_tab` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'primary key',
+  `conversation_id` bigint(20) NOT NULL COMMENT 'primary key of conversation', 
+  `role` varchar(64) NOT NULL DEFAULT 'user' COMMENT 'role of message sender, user/system/assistant 等',
+  `content` text NOT NULL COMMENT 'message detail', -- 长度可能不够 考虑用MEDIUMTEXT
+  `visibility` tinyint(4) DEFAULT '0' COMMENT 'user visibility, 0-hidden, 1-show',
+  `extend_field` text COMMENT 'extend filed, json string, like s3 key of csv file',
+  `create_by` varchar(255) NOT NULL DEFAULT '' COMMENT 'user hadoop account',
+  `create_time` bigint(20) NOT NULL DEFAULT '0' COMMENT 'timestamp in millis',
+  PRIMARY KEY (`id`),
+  KEY `idx_conversation_id` (`conversation_id`),
+  KEY `idx_create_time` (`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+Generate Execution Plan
+生成execution plan这部分实际上是一个data analysis agent的通用chat接口，用户可以通过message来生成plan、修改plan，后续可能需要支持对已有dataframe通过message进行处理的代码生成。
+
+而在用户accept and run的时候，可以使用专门的接口通过前后端的配合来执行plan中的每一步，包括对执行错误步骤的修正。所以这里可以分开来看这几个接口，先看下agent的chat接口：
+初始化dataframe时读一次csv文件，存到Redis，key：固定前缀+conversation_id+ s3 file path, 后面用户运行cell会上报kernel df(redis key: kernel_id)，后面步骤就读取kernel dataframe 
+生成的execution plan存储到Redis，key: planId, 并且保证同一个kernel中同一个文件只有一个execution plan. 生成唯一的plan_id( 固定前缀+conversation_id+ s3 file path 进行 base64 encode)，映射关系放Redis
+
+用户在运行第一步，或者说是load dataframe之前的步骤时，后台获取之前上传时存下来的df info，如果是后续步骤则使用cell执行后所上报的df信息
+cell运行失败前端自动调用re-generate code继续执行，但重试次数需要限制 3次
+
+Cancel / Stop Execute Plan
+直接使用上述的update status of step接口即可，更新当前step为cancel
+一个conversation中一个文件只会对应一个plan，通过文件s3path 生成一个plan_id作为Redis的key存储plan， stop或者取消不会影响plan_id的值，后续该conversation中相同文件生成的plan会覆盖原有的。
+

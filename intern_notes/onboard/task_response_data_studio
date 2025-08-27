@@ -1,0 +1,82 @@
+data studio业务流程与data suite平台功能认知
+
+本文为入职 Entry Task 的业务理解与学习记录，旨在梳理 Data Studio 平台的核心业务流程、功能模块以及数据开发实践方法，以便后续更高效地参与平台相关的开发与运维工作。
+
+一、平台整体架构与核心流程
+
+权限管理（RAM）
+RAM 负责平台内所有权限的统一管控，包括表、数据库、计算资源等。平台会通过与 RAM 的交互，实时检查并验证用户的相关操作权限。
+
+调度系统（Scheduler）
+Scheduler 是计算作业调度的唯一入口，负责与各类计算引擎交互，将任务提交至 Presto、Spark、ClickHouse 等执行环境，并完成对 HDFS、S3、CSV 等不同数据源的双向数据处理与转换。
+
+数据开发(data studio)
+data studio是面向数据开发者的任务开发和调度平台. 与Scheduler紧密集成，提供任务创建、调度、监控等功能。用户可以在 Data Studio 中编写 SQL 任务，配置运行参数，并通过 Scheduler 提交执行。
+
+二、环境划分与使用场景
+
+DEV 环境：用于任务调试与快速迭代，定时任务发布无需审批。
+
+Staging 环境：配置与生产环境接近，用于正式发布前的验证与测试。
+
+Prod 环境：实际生产环境，审批流程严格，确保任务稳定运行。
+
+三、Marker 与 Offset 机制
+
+Input Marker
+用于标记即将使用的数据源是否准备就绪，或上游任务是否成功完成。可选择自动解析（Auto Parse）或自定义配置，需配合 Offset（时间粒度大于 week）精确定位数据实例。
+
+Output Marker
+用于标记任务是否已成功输出数据，或任务运行是否成功。上游任务的 Output Marker 可作为下游任务的 Input Marker，从而实现任务链路的衔接。可通过自动解析脚本生成，或手动配置 Output Marker 名称与 Offset。
+
+Offset
+定义数据时间范围（如 -2 month），配合 Marker 可实现更细粒度的数据依赖与调度控制。
+
+四、数据开发流程
+
+创建目标表，明确需接收的上游数据表及字段。
+
+选择合适目录与任务类型（Presto、Spark、ClickHouse 等）。
+
+在任务中编写 SQL 或业务逻辑，运行并检查日志，确保任务可正确输出结果文件。
+
+配置任务运行周期、调度方式、重试机制与告警机制。
+
+发布任务至相应环境，并在运维阶段持续监控运行结果。
+
+五、Data Studio 各功能模块认识
+
+Image Center：管理任务运行所需镜像（Spark、Presto、Shell 等）。
+
+Shared Drive：存放公共脚本、Jar 包、配置文件等，可共享给不同项目与成员。
+
+Template：任务开发脚手架，提供标准化代码框架、依赖与运行环境配置。
+
+Data Catalogue：查看数据集元数据、字段信息、分区、存储路径、血缘关系等。
+
+Resources：管理任务运行所需的计算资源、队列、依赖包与环境变量。
+
+Global Search：统一搜索入口，可快速定位任务、表、字段、模板、函数、脚本等。
+
+Function Center：统一管理和复用 UDF（适用于 Spark 和 Presto）。
+
+Release Center：任务发布与版本管理平台，支持审批、版本记录与回滚。
+
+Execution Tracker：任务运行状态与日志追踪工具，可查看执行人、调度信息、查询结果等。
+
+NoteBook：用于临时运行和验证，不作为主要开发工具。
+
+Recycle Bin：删除任务/脚本的回收站，防止误删造成数据丢失。
+
+六.
+reference: 
+**高度推荐h
+e-learning: ttps://learning.sea.com/e-viewer/11631239(data studio)  
+https://learning.sea.com/e-learning/20269(scheduler)
+forum: 
+https://datasuite.shopee.io/forum/article/detail/0fb5887f3a0a451194534b16bf5d0797?lang=CN&traceId=51329614c9a4444e8b3319ca6bad5124(data studio功能,原理,入门)
+https://datasuite.shopee.io/forum/article/detail/3540b7c8553c4215a5ee455335e5539d?lang=CN&source=POPULAR(marker使用)
+https://datasuite.shopee.io/forum/article/detail/d2cc353a41b241a89e559b537f0eb361?lang=CN&source=POPULAR(数据开发实践)
+ 
+
+

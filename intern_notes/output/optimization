@@ -1,0 +1,42 @@
+进行了AI code quick edit accept rate analysis
+发现使用notebook多的用户,ai quick的accept rate不高,
+
+*背景 (Background)
+当前 SQL 编辑器的 AI 辅助编辑（AI Edit） 存在几个问题：
+.上下文增强不足
+现在只支持基于 表元数据（metadata） 的提示，
+不能把用户已有的 SQL 脚本当作上下文。
+导致 AI 生成的修改建议 缺少业务相关性，需要用户手动解释更多背景。
+
+.缺少字段样例值 (Field Value Samples)
+只有字段名，没有字段样例值（比如某一列真实可能有哪些值）。
+如果AI只看到字段名字, 但是不知道这个字段名可能得真实值, 生成的 SQL 就可能不够贴近真实业务，用户需要反复修改。
+
+.Undo/Redo 功能不足
+编辑器的撤销/重做功能不完善，复杂编辑下容易出错，缺少快速回滚机制。
+
+*优化方向
+提升 SQL 编辑效率和用户体验，从三个方面优化：
+.code字段传入用户写的SQL语句,提供操作context
+
+.字段样例值注入
+将表字段的样例值（比如某一列的日期、状态枚举值）注入 AI 提示，
+让生成的 SQL 更准确、更符合业务。
+字段样例值的同步有两种方案,
+A : 全量同步Hive-> Redis,30 day expire
+B : Hive job 只同步新增/更新的表. 没有过期时间
+每天执行调度任务,从hive同步数据到Redis
+HMS(Hive Metastore,不存储数据本身,存储表结构,字段类型,分区信息,位置等元信息) -> hive -> Redis
+.基于asset的上下文支持 (Asset-Based Context)
+用户可以把已有 SQL 脚本作为上下文，
+AI 修改时能考虑用户的业务逻辑和已有代码。
+
+.Undo/Redo 快捷键支持
+用conversation_id进行回滚和撤销
+支持 Cmd/Ctrl + Z (撤销)，Cmd/Ctrl + Y (重做)，
+覆盖输入、删除、替换操作，提升容错性
+添加请求参数: 
+previous_conversation_id当用户进行回退时，指定回退的对话 ID，让 AI 知道从哪个版本开始撤销。与keep_conversation_round同时存在
+keep_conversation_round	控制撤销的轮数：0表示全部回退完, 4保留最近4轮对话, 1/null → 不回退
+conversation_id	当前会话 ID，用于标记当前编辑上下文
+at_tables / at_codes	关联的表和已有 SQL，保证回退时上下文完整

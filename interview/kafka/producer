@@ -1,0 +1,57 @@
+*producer工作流程
+1.序列化(Serialization) 
+将java对象转化为byte array, key 和 value 有个字独立的Serializer
+常用的Serializer有StringSerializer, IntegerSerializer, ByteArraySerializer等,也可以自定义JSON序列化器
+2.分区器(Partitioner) 选择分区
+如果消息带Key -> 根据key,进行Hash,确保带key的消息落在同一个partition,
+如果没有带key,则轮询(Round Robin)分配到各个分区,或者粘性分区
+也可以自定义分区规则
+3.将消息放入RecordAccumulator(消息缓冲区)
+Producer不会立即发,每个分区对应一个Batch队列,消息会先放入RecordAccumulator中
+在这个缓冲区中进行消息的临时存储,消息的分组分区,以及把消息合并成批次batch
+4.Sender线程异步发送
+根据batch.size(批次大小,默认16kb)或linger.ms(等待时间)来触发发送. 请求发送到Broker的Leader分区,Leader将数据写入本地日志,并且同步到ISR中的Follower
+
+*相关细节概念
+.批量发送参数优化
+batch.size: 批次大小,默认16kb,一个批次的最大字节数
+linger.ms: 批次等待时间,默认0ms,如果设置为5ms,则Producer会等待5ms再发送,以便积攒更多消息
+buffer.memory: 控制RecordAccumulator大小,默认32MB,如果缓冲区满了,会阻塞发送或抛异常
+
+.消息压缩
+Kafka可以支持gzip, snappy, lz4等压缩算法,通过compression.type参数配置.
+压缩可以减少网络带宽和存储空间,提高吞吐量,但会增加CPU开销.
+一般压缩进行在Producer端,在Consumer端解压缩.
+
+.分区策略
+如果有key,会使用hash分区器,将同一个key的消息发送到同一个分区.
+而在单个分区中,消息是有序的,所以如果想要保证业务数据的有序消费,就可以让它们有相同的key. 
+如果没有key,在Kafka2.4后引入了StickerPartitioner,它会根据消息的内容和历史发送记录来智能选择分区,从而减少跨分区的发送,提高性能.
+如果需要自定义,也可以implements Partitioner接口来实现自定义分区逻辑.
+
+
+*生产者可靠性保证 
+1.消息确认机制
+acks决定了Producer在认为消息发送成功前,需要等待多少Broker的确认.
+acks=0: 不等待任何确认,最快,绝不重复,但是可能丢失数据
+acks=1: 只等待Leader确认写入,Follower可能还没有同步就返回
+acks=-1/all: 等待ISR中所有的副本确认写入,最安全,但是延迟比较高
+不同的配置需要根据实际场景 平衡吞吐量和数据安全
+2.重试机制
+retries参数控制Producer在发送失败时的重试次数. 
+重试可能导致消息重复(除非开启enable.idempotence=true).
+另外,必须配合delivery.timeout.ms限制整体超时时间
+
+3.幂等生产者(Idempotent Producer)
+Kafka提供了幂等生产者功能,可以确保即使在网络异常或重试的情况下,也不会重复发送同一条消息.通过设置enable.idempotence=true,Producer会自动处理消息的唯一性,避免重复写入.
+这对于需要严格保证消息唯一性的场景非常有用,如金融交易等.
+
+4.事务性生产者(Transactional Producer)
+Kafka还支持事务性生产者,可以确保一组消息要么全部成功,要么全部失败.
+通过设置transactional.id和开启enable.idempotence=true,Producer可以在事务中发送多条消息,并在提交(commit)或回滚(abort)时确保数据的一致性.
+这对于需要跨多个Topic或Partition的复杂业务场景非常有用,如订单处理等.
+
+*Kafka消息投递语义
+.at most once: 消息最多投递一次,可能丢失,但是绝不重复.  acks=0
+.at least once: 消息至少投第一次,可能重复,但是不会丢失. acks=all + retries > 0
+.exactly once: 消息严格投递一次,既不会丢失也不会重复(幂等性 + 事务) enable.idempotence=true + transcational.id (kafka事务)

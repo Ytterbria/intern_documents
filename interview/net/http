@@ -1,0 +1,32 @@
+*HTTP状态码
+1XX 信息
+100 continue 客户端先发和他的人生,确认可以继续发body(一般用于大文件上传)
+101 Switching Protocol 切换协议,例如HTTP升级到WebSocket
+
+2XX 成功
+200 OK 请求成功  201 Created 资源已经成功创建 
+204 No Content 请求成功但是没有返回内容 (常见于DELETE)
+
+3XX 重定向
+301 Moved Permanently 永久重定向,告诉搜索引擎以后都用新地址 307(保持请求方法)
+302 Found 临时重定向,下次还会访问旧地址 308 --强制保持请求方法
+303 See other 用于POST 提交后跳转到GET页面
+304 Not Modified资源未修改,使用缓存
+
+4XX 客户端错误
+400 Bad Request: 请求格式有问题
+401 Unauthorized: 未认证,需要登录(token)
+403 Forbidden: 已经认证,但是权限不够
+404 Not Found
+405 Method Not Allowed : 方法不允许(OPTION查看允许的方法)
+
+5XX 服务端错误
+500 Internal Server Error 服务器内部错误(代码异常)
+501 Not Implemented 服务器不支持该方法
+502 Bad GateWay 网关错误,Nginx或代理服务器没拿到正确响应
+503 Service Unavailable 服务器过载/维护中
+504 GateWay TimeOut 网关超时,上游服务器没响应
+
+*http与https
+https使用了 SSL/TLS协议对数据进行了加密传输,端口默认443
+

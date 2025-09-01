@@ -1,0 +1,27 @@
+.***** 无重复字符的最长子串  字节41 腾讯3
+set维护窗口,0 ~ length 递增right指针,不断往set加s.charAt(right)
+期间如果窗口右边加入的字符发生重复,则从left开始收缩直到不重复
+每次更新res = max( set.size() | res )
+
+.找到字符串中的所有字母异位词 字节5
+用 int[]pcount,scount来记录每个两字符串各个字符出现的次数
+1.先遍历plen,然后各自把各自的 长度记录好 ++xcount[x.charAt(i)-'a'];
+2.遍历完过后用Arrays.equals(scount,pcount)判断开头是否符合
+然后遍历 slen - plen, 中途判断是否符合,符合则 res.add(i + 1);
+
+.* 滑动窗口最大值 字节5 腾讯2
+1.初始化deque, nums.length,res = new int[n-k+1];
+2.遍历n 
+如果后来的太优秀了, nums[i] > 队列尾部的元素,则不断把tail poll出去
+while(deque.isEmpty() && nums[i] > nums[deque.peekLast()]){
+deque.pollLast();
+}
+deque.offerLast();从后面进
+// 如果头的太老了,超过了窗口, 则poll
+if(deque.peekFirst() < i - k + 1){
+    deque.pollFirst();
+}
+3. 形成窗口,则开始更新答案
+if(i >= k - 1) res[i-k+1] = nums[deque.peekFirst()];
+
+

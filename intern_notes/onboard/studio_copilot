@@ -1,0 +1,15 @@
+web api的用法
+from fastapi import FastAPI
+app = FastAPI()
+
+@app.get("/hello")
+def hello(name: str = "world"):
+    return {"message": f"Hello {name}"}
+
+数据处理 dataFrame
+import pandas as pd
+df = pd.read_csv("data.csv")
+df["new_col"] = df["age"] * 2
+print(df.head())
+
+python

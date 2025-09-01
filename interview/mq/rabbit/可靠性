@@ -1,0 +1,40 @@
+可靠性有多个方面的需求: 需要防止消息丢失,保证投递,保证被成功消费等
+主要分为了
+
+*消息投递:生产者发出的消息不会丢失 -> 
+消息确认机制(ACK)
+.生产者确认
+生产者发送消息过后,可以开启确认模式,rabbitmq返回ack/nack,确保消息成功到达exchange
+
+*消息存储: 消息存储在队列中即使rabbitMQ重启也不会丢失 ->
+1.使用消息队列持久化
+channel.queueDeclare("task_queue",true,false,false,null);
+声明队列的时候持久化,表示rabbitMQ重启时队列依然存在
+
+2.消息持久化
+AMQP.BasicProperties props = new AMQP.BasicProperties.Builder()
+.deliveryMode(2) //1 == 非持久, 2 == 持久
+.build()
+channel.basicPublish("","task_queue",props,message.getBytes())
+讲消息存储在磁盘上,不会因为RabbitMQ重启而丢失
+
+不足
+但是如果RabbitMQ在crash之前, 消息还没有写入磁盘,还是可能丢失
+所以如果是特别重要的数据,我设计可以先存进数据库,消费掉过后再删除
+而实习过后发现,真正重要的数据,或者需要进行分析操作的数据,是存在云平台对象存储的
+设计相关的resources,可以让用户随取随用,更加的方便,存储成本也更合理. 
+相关的逻辑业务操作也更加的耦合连贯
+
+3.消息镜像队列
+rabbitmq集群中,为了保证队列节点故障时消息不丢失可以用
+Classic Mirrored Queue: 队列在多个节点上同步复制,主节点挂了,从节点接管
+Quorum Queue: 使用了类似Raft一致性协议,提供更强的一致性和高可用
+
+*消息消费的可靠性: 消息不回因为消费者异常或网络问题而丢失
+1.消费者确认
+默认 autoACK = false,等待消费者处理完消息后显示确认,basicAck()表示消息已成功
+消费,如果没有ack的消息,就表示消费者掉线/异常, rabbit就会把消息重新投递给其他消费者
+如果autoAck = true,那么一旦发出就认为消费成功,风险比较高,消息可能丢失
+2.消息重试/死信队列
+消息失败或超时,可以进入死信队列, 消费者可以选择策略(延迟重试/手动处理)
+从而避免消息被丢弃或丢失

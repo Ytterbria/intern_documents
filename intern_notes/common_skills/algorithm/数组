@@ -1,0 +1,58 @@
+.** 和为K的子数组 字节10 
+本质是前缀和, 找sum[j] - sum[i] = k,  但是不能双层遍历i,j.
+所以使用hashmap优化,只用找 map.containsKey(sum[j]- k);
+Map<Integer,Integer> key存的是 sum[j] - k,也就是遍历出来的sum[i].
+value 表示这种sum[j]出现了多少次
+for (n : nums){
+    presum += n;
+    if (map.containsKey(presum - k)){
+        res += map.get(presum-k);
+    }
+    map.put(presum,map.getOrDefault(presum,0)+1);
+}
+
+.最大子数组和 *** byte10, baidu2,Tencent2,美团2
+动态规划/滚动数组. 
+初始化 dp,res = nums[0];
+更新dp = max(dp + nums[i],nums[i]);
+res = max(res,dp);
+
+.合并区间 *** byte10,腾讯,美团,shopee,快手,阿里
+关键核心步骤:  先按照左域排序再遍历
+Arrays.sort(intervals,(a,b)->a[0]-b[0]);
+for (int[] interval: intervals){
+    if (curr[1] >= interval[0]){//右界大于interval左,说明有重叠,进行合并
+        curr[1] =Math.max(curr[1],interval[1]);
+    }else {
+        curr = interval;
+        res.add(curr);
+    }
+    return res.toArray(new int[res.size()][]) 转化数组int[][]的语法
+}
+
+.轮转数组 实质上是三次reverse(0,n-1),reverse(0,k-1),reverse(k,n-1);
+private void reverse(int[] nums,int left,int right){
+    int t = nums[left];
+    nums[left] = nums[right];
+    left ++;right --;
+}
+
+.除自身以外的数组的乘积(前曼巴和后曼巴) 
+for (int i =  1;i <=n;i ++) res[i] = res[i-1] * nums[i-1];
+for (int i = n-1;i >= 0;i --) res[i] *= right;right *= nums[i];
+
+.缺失的第一个正数
+原地哈希法/ 置换法 
+把每个数放在它本来该在的位置上, 例如 3 应该在nums[2]上: nums[t-1] = t;
+for (int i = 0;i <n;i++){
+    // 注意nums[i] > 0不能等于0,
+    while (nums[i] > 0 && nums[i] < n && nums[i] != nums[nums[i]-1]){
+        int t = nums[i];
+        nums[i] = nums[t -1]; -- 交换防丢失
+        nums[t-1] = t; --放在该在的位置
+    }
+}
+for (int i = 0;i < n;i ++){
+    if (nums[i] != i + 1) return i +1
+}
+return n + 1;

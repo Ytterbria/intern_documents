@@ -1,0 +1,24 @@
+redis是内存数据,如果进程挂了或者服务器宕机重启,数据就会全部丢失
+持久化就是把内存中的数据写进磁盘中,在重启时可以恢复
+*RDB(Redis DataBase)
+某个时刻,将内存里的数据快照保存成.rdb文件,redis重启时直接把这个文件加载到内存
+SAVE -> 阻塞主线程,直接生产RDB文件
+BGSAVE -> fork子进程来写文件,主线程继续处理读写请求
+redis.conf配置
+save 900 1 # 900 秒内,至少一次修改
+
+*AOF(append only file)
+把redis的每一条写命令追加到.aof文件中, redis重启时,重新执行AOF文件里的命令,恢复数据
+redis.conf 配置 :
+appendonly yes 
+appendfsync always: 每一次写命令都fsync, 
+everysec :每秒同步一次(default)
+
+文件过大时,redis会对AOF进行重写,只保留能恢复数据的最小命令集,
+例如原本记录的多次INCR,直接记录成 set key value
+AOF比RDB文件大很多,而且恢复相对比较慢,因为需要一条条执行命令重放
+
+redis 4.0 引入了混合持久化
+在AOF重写时,把RDB快照内容写入AOF文件头部,后面再追加命令日志
+这样既有RDB的回复速度,又有AOF的实时性
+

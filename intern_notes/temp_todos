@@ -1,41 +1,52 @@
-class Solution {
-    public int jump(int[] nums) {
-        int steps = 0;       // 记录跳跃次数
-        int end = 0;         // 当前跳跃的边界
-        int farthest = 0;    // 当前能跳到的最远位置
+整体流程 
 
-        // 注意：最后一个位置不用再跳
-        for (int i = 0; i < nums.length - 1; i++) {
-            farthest = Math.max(farthest, i + nums[i]);
-            if (i == end) {       // 到达当前跳跃的边界
-                steps++;
-                end = farthest;   // 更新下一次跳跃的边界
+用户输入数据 (csv) 和自己的分析需求,启动一个kernel,kernel包含了sql需要的引擎,执行的队列,cpu资源等
+(但是自己的项目是 支持excel的,  
+easy excel, 表头,信息,结合工具自己写parser解析Excel,进行格式兼容)
+
+然后传入 prompt + 数据文件 + kerne_id + conversation_id
+接下来后端使用python pandas获得 dataframe,并且存给redis,然后把获得到的
+data frame + prompt给agent,然后生成执行计划(清洗数据,分析,结论,可视化等)
+
+计划是一步一步进行的,用户期间在accept and run之前可以让agent 不断修改,直到满意才执行agent生成的代码 然后进入下一步
+class Solution {
+    public int firstMissingPositive(int[] nums) {
+        int n = nums.length;
+        for (int i = 0;i < n;i ++){
+            while (nums[i] > 0 && nums[i] < n && nums[i] != nums[nums[i] - 1]){
+                int t = nums[i];
+                nums[i] = nums[t - 1];
+                nums[t-1] = t;
             }
         }
-        return steps;
+        for (int i = 0;i < n;i ++){
+            if(nums[i] != i + 1){return i + 1;}
+        }
+        return n + 1;
     }
-}
+}class Solution {
+    private int maxSum = Integer.MIN_VALUE;
 
-class Solution {
-    public int longestConsecutive(int[] nums) {
-        
-        if (nums.length == 0) {
-            return 0;
-        }
-    Arrays.sort(nums);
-    int max = 1,res = 1;
-    for (int i = 1;i < nums.length;i ++)
-    {
-        if (nums[i]-nums[i-1]==0){
-            continue;
-        }
-        if (nums[i]-nums[i-1] == 1){
-            max ++ ;
-            res = Math.max(max,res);
-        }else {
-            max = 1;
-        }
+    public int maxPathSum(TreeNode root) {
+        dfs(root);
+        return maxSum;
     }
-    return res;
+
+    // 返回当前节点对父节点的最大贡献值
+    private int dfs(TreeNode node) {
+        if (node == null) return 0;
+
+        // 左右子树的最大贡献值（如果小于 0 就不要）
+        int leftGain = Math.max(dfs(node.left), 0);
+        int rightGain = Math.max(dfs(node.right), 0);
+
+        // 以当前节点为路径拐点的路径和
+        int priceNewPath = node.val + leftGain + rightGain;
+
+        // 更新全局最大值
+        maxSum = Math.max(maxSum, priceNewPath);
+
+        // 返回当前节点对父节点的最大贡献（只能选左或右）
+        return node.val + Math.max(leftGain, rightGain);
     }
 }

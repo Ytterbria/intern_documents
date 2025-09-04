@@ -1,15 +1,455 @@
-web api的用法
+太好了！下面我按“最小可用→可扩展”的思路，**手把手**带你实现一个可跑的 Python Agent 项目，并在最后给出“接 Redis / MySQL”的扩展点。我们直接基于你现在的项目继续搭建。
+
+---
+
+# 步骤 0｜安装所需依赖
+
+本 demo 只依赖标准库 + `fastapi` + `uvicorn` + `httpx` + `python-dotenv`（用于读取 `.env`），不强依赖 langchain，结构更清晰。
+
+```bash
+poetry add httpx python-dotenv
+```
+
+> 你之前已经有 `fastapi`、`uvicorn`。如果没有：
+> `poetry add fastapi uvicorn`
+
+---
+
+# 步骤 1｜项目结构（在现有基础上新增几个文件夹）
+
+```
+copylot/
+├── app.py                      # FastAPI 入口（已有）
+├── config.py                   # 配置（已有，可替换为下文版本）
+├── models.py                   # Pydantic 请求/响应模型（已有，可覆盖）
+├── copylot/
+│   ├── __init__.py
+│   ├── main.py                 # 可忽略
+│   ├── agent/
+│   │   ├── __init__.py
+│   │   ├── core.py             # Agent 主逻辑（新增）
+│   │   └── tools/
+│   │       ├── __init__.py
+│   │       ├── sql_parser.py   # 示例 Tool（新增）
+│   │       └── python_help.py  # 示例 Tool（调用LLM）（新增）
+│   ├── llm/
+│   │   ├── __init__.py
+│   │   └── deepseek_client.py  # DeepSeek 调用封装（新增）
+│   └── storage/
+│       ├── __init__.py
+│       └── memory.py           # 会话上下文 Memory 存储（先用内存，后面教你换 Redis）
+├── .env                        # 环境变量（新增）
+└── pyproject.toml
+```
+
+---
+
+# 步骤 2｜配置与环境变量
+
+## `config.py`（覆盖为下文版本）
+
+```python
+# config.py
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# --- LLM / DeepSeek ---
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "")           # 必填：你的 DeepSeek Key
+LLM_MODEL   = os.getenv("LLM_MODEL", "deepseek-chat")
+
+# --- Memory / 会话历史 ---
+HISTORY_MAX_TURNS = int(os.getenv("HISTORY_MAX_TURNS", "8"))
+
+# --- 可选：Redis / MySQL 预留（后续扩展用）---
+REDIS_URL    = os.getenv("REDIS_URL", "")            # 例如：redis://localhost:6379/0
+DATABASE_URL = os.getenv("DATABASE_URL", "")         # 例如：mysql+pymysql://user:pwd@host:3306/dbname
+```
+
+## `.env`（新建）
+
+```dotenv
+LLM_API_KEY=你的_DeepSeek_API_KEY
+LLM_MODEL=deepseek-chat
+LLM_BASE_URL=https://api.deepseek.com
+HISTORY_MAX_TURNS=8
+# REDIS_URL=redis://localhost:6379/0
+# DATABASE_URL=mysql+pymysql://user:pwd@localhost:3306/agent_demo
+```
+
+> **安全提示**：`.env`不要提交到仓库。
+
+---
+
+# 步骤 3｜LLM 客户端封装（DeepSeek）
+
+## `copylot/llm/deepseek_client.py`
+
+```python
+# copylot/llm/deepseek_client.py
+from typing import List, Dict, AsyncGenerator, Optional
+import httpx
+
+class DeepSeekClient:
+  def __init__(self, api_key: str, base_url: str = "https://api.deepseek.com"):
+    self.api_key = api_key
+    self.base_url = base_url.rstrip("/")
+
+  async def acomplete(
+    self,
+    messages: List[Dict[str, str]],
+    model: str = "deepseek-chat",
+    temperature: float = 0.2,
+    stream: bool = False,
+    timeout: Optional[float] = 30.0,
+  ) -> str | AsyncGenerator[str, None]:
+    url = f"{self.base_url}/chat/completions"
+    payload = {"model": model, "messages": messages, "temperature": temperature, "stream": stream}
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+      headers = {"Authorization": f"Bearer {self.api_key}"}
+      if not stream:
+        r = await client.post(url, headers=headers, json=payload)
+        r.raise_for_status()
+        data = r.json()
+        return data["choices"][0]["message"]["content"]
+
+      # streaming
+      r = await client.post(url, headers=headers, json=payload)
+      r.raise_for_status()
+
+      async def _stream():
+        async for line in r.aiter_lines():
+          if not line or not line.startswith("data: "):
+            continue
+          if line.strip() == "data: [DONE]":
+            break
+          chunk = line.removeprefix("data: ").strip()
+          try:
+            obj = httpx.Response(200, text=chunk).json()
+          except Exception:
+            continue
+          delta = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
+          if delta:
+            yield delta
+      return _stream()
+```
+
+---
+
+# 步骤 4｜最简单的会话记忆（先用内存）
+
+## `copylot/storage/memory.py`
+
+```python
+# copylot/storage/memory.py
+from collections import defaultdict
+from typing import List, Dict
+from config import HISTORY_MAX_TURNS
+
+class InMemoryStore:
+  def __init__(self):
+    # session_id -> list[{"role": "...", "content": "..."}]
+    self._store: Dict[str, List[Dict[str, str]]] = defaultdict(list)
+
+  def get_history(self, session_id: str) -> List[Dict[str, str]]:
+    return self._store.get(session_id, [])
+
+  def append(self, session_id: str, role: str, content: str):
+    self._store[session_id].append({"role": role, "content": content})
+    # 限制长度（保留最近 N 轮）
+    if len(self._store[session_id]) > 2 * HISTORY_MAX_TURNS:
+      self._store[session_id] = self._store[session_id][-2 * HISTORY_MAX_TURNS :]
+`````
+
+> 之后你可以把这里替换成 Redis（我在文末给出替换代码）。
+
+---
+
+# 步骤 5｜两个示例 Tool（SQL 解析 & Python 帮助）
+
+## `copylot/agent/tools/sql_parser.py`
+
+```python
+# copylot/agent/tools/sql_parser.py
+import re
+from typing import Set
+
+def extract_table_names(sql: str) -> Set[str]:
+  tables: Set[str] = set()
+  # 1) 匹配 FROM ... / JOIN ...
+  for kw in ["from", "join"]:
+    pattern = re.compile(rf"\b{kw}\s+([`\"\[\]\w\.]+)", re.IGNORECASE)
+    for m in pattern.finditer(sql):
+      tables.add(m.group(1))
+  # 2) 简单 insert into
+  m2 = re.finditer(r"\binsert\s+(?:overwrite\s+)?(?:into\s+)?(?:table\s+)?([`\"\[\]\w\.]+)", sql, re.IGNORECASE)
+  for m in m2:
+    tables.add(m.group(1))
+  # 3) 去掉引号、[]、`
+  norm = set()
+  for t in tables:
+    x = t.strip().strip("`").strip('"').strip("[").strip("]")
+    norm.add(x)
+  return norm
+```
+
+## `copylot/agent/tools/python_help.py`
+
+```python
+# copylot/agent/tools/python_help.py
+from typing import List, Dict
+from copylot.llm.deepseek_client import DeepSeekClient
+
+PY_HELP_SYSTEM = (
+  "You are a Python data/dev assistant. "
+  "Answer with short, actionable steps and minimal code examples."
+)
+
+class PythonHelpTool:
+  def __init__(self, llm: DeepSeekClient, model: str):
+    self.llm = llm
+    self.model = model
+
+  async def run(self, question: str, history: List[Dict[str, str]]) -> str:
+    messages = [{"role": "system", "content": PY_HELP_SYSTEM}]
+    # 带一点上下文
+    messages.extend(history[-6:])
+    messages.append({"role": "user", "content": question})
+    return await self.llm.acomplete(messages, model=self.model, temperature=0.2, stream=False)
+```
+
+---
+
+# 步骤 6｜Agent 主逻辑（路由 → 调用不同 Tool → 写入会话）
+
+## `copylot/agent/core.py`
+
+```python
+# copylot/agent/core.py
+from typing import Dict
+from copylot.storage.memory import InMemoryStore
+from copylot.agent.tools.sql_parser import extract_table_names
+from copylot.agent.tools.python_help import PythonHelpTool
+
+class RouterAgent:
+  def __init__(self, store: InMemoryStore, py_tool: PythonHelpTool):
+    self.store = store
+    self.py_tool = py_tool
+
+  async def ask(self, session_id: str, question: str) -> Dict[str, str]:
+    # 1) 取历史
+    history = self.store.get_history(session_id)
+
+    # 2) 简单路由规则
+    q_lower = question.lower().strip()
+
+    # 显式模式：sql: 开头 → SQL 工具
+    if q_lower.startswith("sql:"):
+      sql = question[4:].strip()
+      tables = extract_table_names(sql)
+      answer = f"解析到的表: {', '.join(tables) if tables else '(未识别)'}"
+    else:
+      # 默认 → Python 帮助（LLM）
+      answer = await self.py_tool.run(question, history)
+
+    # 3) 写历史
+    self.store.append(session_id, "user", question)
+    self.store.append(session_id, "assistant", answer)
+
+    return {"answer": answer}
+```
+
+---
+
+# 步骤 7｜请求/响应模型
+
+## `models.py`（覆盖为下文版本）
+
+```python
+# models.py
+from pydantic import BaseModel, Field
+
+class AskRequest(BaseModel):
+  session_id: str = Field(..., description="会话ID，用于多轮对话")
+  question: str  = Field(..., description="用户问题")
+
+class AskResponse(BaseModel):
+  answer: str
+```
+
+---
+
+# 步骤 8｜FastAPI 入口（接前端/测试）
+
+## `app.py`（覆盖为下文版本）
+
+```python
+# app.py
 from fastapi import FastAPI
-app = FastAPI()
+from models import AskRequest, AskResponse
+from config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
+from copylot.storage.memory import InMemoryStore
+from copylot.llm.deepseek_client import DeepSeekClient
+from copylot.agent.python_help import PythonHelpTool  # alias path fix
+from copylot.agent.core import RouterAgent
 
-@app.get("/hello")
-def hello(name: str = "world"):
-    return {"message": f"Hello {name}"}
+# 修正导入路径（python_help 在 tools 下）
+from copylot.agent.tools.python_help import PythonHelpTool as _PythonHelpTool
 
-数据处理 dataFrame
-import pandas as pd
-df = pd.read_csv("data.csv")
-df["new_col"] = df["age"] * 2
-print(df.head())
+app = FastAPI(title="Copylot Agent Demo", version="0.1.0")
 
-python
+# --- 依赖装配 ---
+store = InMemoryStore()
+llm   = DeepSeekClient(api_key=LLM_API_KEY, base_url=LLM_BASE_URL)
+py_tool = _PythonHelpTool(llm=llm, model=LLM_MODEL)
+agent = RouterAgent(store=store, py_tool=py_tool)
+
+@app.get("/healthz")
+async def healthz():
+  return {"status": "ok"}
+
+@app.post("/ask", response_model=AskResponse)
+async def ask(req: AskRequest):
+  result = await agent.ask(session_id=req.session_id, question=req.question)
+  return AskResponse(**result)
+```
+
+> 注意上面两行导入：
+> `from copylot.agent.python_help import PythonHelpTool` 是误导路径；真正文件在 `tools/` 下，所以接着用了：
+> `from copylot.agent.tools.python_help import PythonHelpTool as _PythonHelpTool`
+> 也可以直接删掉第一行误导导入。
+
+---
+
+# 步骤 9｜运行与测试
+
+```bash
+uvicorn app:app --reload
+```
+
+测试（任意一个）：
+
+```bash
+# 走 LLM（Python 助手）
+curl -X POST http://127.0.0.1:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{"session_id":"s1","question":"pandas怎么把两列相加得到新列？"}'
+
+# 走 SQL 工具（本地解析表名，不调用 LLM）
+curl -X POST http://127.0.0.1:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{"session_id":"s1","question":"sql: select * from db.users u join orders o on u.id=o.uid"}'
+```
+
+---
+
+# 可选进阶 A｜把内存会话换成 Redis
+
+安装：
+
+```bash
+poetry add redis
+```
+
+新文件 `copylot/storage/redis_store.py`：
+
+```python
+# copylot/storage/redis_store.py
+import json
+from typing import List, Dict
+import redis
+
+class RedisStore:
+  def __init__(self, url: str, prefix: str = "sess:"):
+    self.r = redis.from_url(url, decode_responses=True)
+    self.prefix = prefix
+
+  def _key(self, session_id: str) -> str:
+    return f"{self.prefix}{session_id}"
+
+  def get_history(self, session_id: str) -> List[Dict[str, str]]:
+    key = self._key(session_id)
+    items = self.r.lrange(key, 0, -1)
+    return [json.loads(x) for x in items]
+
+  def append(self, session_id: str, role: str, content: str):
+    key = self._key(session_id)
+    self.r.rpush(key, json.dumps({"role": role, "content": content}))
+    # 也可在这里做长度裁剪
+```
+
+在 `app.py` 里替换装配：
+
+```python
+from config import REDIS_URL
+from copylot.storage.memory import InMemoryStore
+# from copylot.storage.redis_store import RedisStore  # 开启 Redis 时用它
+
+# ...
+store = InMemoryStore()  # 默认
+# if REDIS_URL:
+#   store = RedisStore(REDIS_URL)
+```
+
+---
+
+# 可选进阶 B｜把对话持久化到 MySQL（SQLAlchemy）
+
+安装：
+
+```bash
+poetry add sqlalchemy pymysql
+```
+
+简化示例（同步方式）：
+
+```python
+# copylot/storage/db.py
+from sqlalchemy import create_engine, text
+from config import DATABASE_URL
+
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, future=True)
+
+def save_message(conversation_id: str, role: str, content: str):
+  with engine.begin() as conn:
+    conn.execute(
+      text("INSERT INTO conversation_history(conversation_id, role, content) VALUES (:cid, :role, :content)"),
+      {"cid": conversation_id, "role": role, "content": content}
+    )
+```
+
+表结构（MySQL）：
+
+```sql
+CREATE TABLE conversation_history (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  conversation_id VARCHAR(64) NOT NULL,
+  role VARCHAR(16) NOT NULL,       -- user/assistant/system
+  content TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+你可以在 `RouterAgent.ask()` 写入 DB（与 Memory/Redis 并存）：
+
+```python
+# 追加：
+# from copylot.storage.db import save_message
+# save_message(session_id, "user", question)
+# save_message(session_id, "assistant", answer)
+```
+
+---
+
+# 你现在学到的关键点
+
+1. **清晰分层**：`llm`（模型调用）、`agent`（决策/工具路由）、`tools`（可插拔能力）、`storage`（上下文/持久化）、`api`（FastAPI 暴露接口）。
+2. **最小可用**：先把“问答→返回”跑通，再逐步接入 Redis/MySQL、流式响应、权限验证、重试与超时等。
+3. **渐进式引入复杂度**：现在是手写轻量 Agent，等你熟悉后再引入 LangChain / LangGraph 做复杂任务编排。
+
+---
+
+要不要我再帮你加一版「**流式输出（SSE）**」的 `/ask/stream` 接口，或「**工具再多一点（如：运行一个本地 Python 代码片段）**」？只要你说要，我就把代码给齐 👇
